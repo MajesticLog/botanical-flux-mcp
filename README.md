@@ -77,11 +77,11 @@ Images and masks are sent to ComfyUI and fetched back through its API, so ComfyU
 
 ## Adding a species
 
-Add one entry to `SPECIES` in `server.py`: trigger word, name as written in the captions, model file prefix, a prompt template (`CLIMBER` for facades, or your own), the stages with their caption wording, and defaults (framing, light, resolution). Lavender was added this way.
+Add one entry to `SPECIES` in `server.py`: trigger word, name as written in the captions, model file prefix, a prompt template (`CLIMBER` for facades, or your own), the stages with their caption wording, and defaults (framing, light, resolution).
 
 ## How it was built
 
-Built with Claude Code. I designed the tools and the pipeline behind them: which model to use for each species, the settings validated by my training tests, the prompt templates taken from my captions, and the foliage mask used for season changes. The code was written by Claude Code under my direction, and I added the lavender species myself.
+Built with Claude Code. I designed the tools and the pipeline behind them: which model to use for each species, the settings validated by my training tests, the prompt templates taken from my captions, and the foliage mask used for season changes. The code was written by Claude Code under my direction, and I extend it myself.
 
 The models themselves (datasets from iNaturalist / Wikimedia Commons, captions, training with kohya_ss, LoRA vs LoKr comparisons) are documented on their [Hugging Face model cards](https://huggingface.co/collections/Potiron/botanical-lora-lokr-6adf7e67b920a405a2ed33ee).
 
