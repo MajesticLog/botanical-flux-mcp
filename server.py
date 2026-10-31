@@ -53,7 +53,37 @@ SPECIES = {
             "bloom": "in bloom, with many purple flower spikes and tight flower buds",
             "foliage": "in leaf, without flowers, with silvery-grey narrow leaves and woody stems",
         },
-        "defaults": {"framing": "close-up", "light": "Sunny", "size": 768},
+        "defaults": {"setting": "gravel", "framing": "close-up", "light": "Sunny", "size": 768},
+    },
+    # Strawberries: the stage text ends with the count sentence of the captions ("A few fruits").
+    "strawberry": {
+        "trigger": "frs_zc", "name": "garden strawberry (Fragaria × ananassa)", "file": "strawberry_frs_zc",
+        "template": BUSH,
+        "stages": {
+            "bloom": "in flower, with white flowers with yellow centres, trifoliate toothed leaves and flower buds. "
+                     "A few flowers",
+            "unripe": "with unripe fruit, with white unripe strawberries and trifoliate toothed leaves. A few fruits",
+            "ripe": "with ripe fruit, with ripe red strawberries, trifoliate toothed leaves and green unripe berries. "
+                    "A few fruits",
+            "foliage": "in leaf, with trifoliate toothed leaves and runners",
+        },
+        # only the LoKr is published: in the comparisons the LoRA was not better than FLUX alone
+        "models": ("lokr",),
+        "defaults": {"setting": "straw mulch", "framing": "close-up", "light": "Sunny", "size": 768},
+    },
+    "wild_strawberry": {
+        "trigger": "frsbs_zc", "name": "woodland strawberry (Fragaria vesca)", "file": "wild_strawberry_frsbs_zc",
+        "template": BUSH,
+        "stages": {
+            "bloom": "in flower, with white flowers with yellow centres, trifoliate toothed leaves and flower buds. "
+                     "A few flowers",
+            "unripe": "with unripe fruit, with pale pink-blushed unripe strawberries and trifoliate toothed leaves. "
+                      "A few fruits",
+            "ripe": "with ripe fruit, with ripe red strawberries, trifoliate toothed leaves and green unripe berries. "
+                    "A few fruits",
+            "foliage": "in leaf, with trifoliate toothed leaves and runners",
+        },
+        "defaults": {"setting": "moss", "framing": "close-up", "light": "Sunny", "size": 768},
     },
     "wisteria": {
         "trigger": "glcn_zc", "name": "a wisteria vine", "file": "wisteria_glcn_zc",
@@ -91,13 +121,19 @@ SPECIES = {
     },
 }
 CLIMBER_DEFAULTS = {"coverage": "Medium coverage", "posture": "climbing upward, clinging directly and framing windows",
-                    "framing": "wide shot", "light": "Overcast", "size": 1024}
+                    "framing": "wide shot", "light": "Overcast", "size": 1024,
+                    "setting": "stone wall, residential house, white sash windows"}
 ALIASES = {"glycine": "wisteria", "clematite": "clematis", "clématite": "clematis", "vigne vierge": "boston_ivy",
            "vigne_vierge": "boston_ivy", "boston ivy": "boston_ivy", "lierre": "english_ivy", "ivy": "english_ivy",
            "english ivy": "english_ivy", "flowers": "bloom", "flowering": "bloom", "leaf": "foliage",
            "leaves": "foliage", "fall": "autumn",
            "fleurs": "bloom", "floraison": "bloom", "feuilles": "foliage", "feuillage": "foliage",
-           "été": "summer", "ete": "summer", "automne": "autumn", "lavande":"lavender"}
+           "été": "summer", "ete": "summer", "automne": "autumn", "lavande": "lavender",
+           "fraise": "strawberry", "fraisier": "strawberry", "garden strawberry": "strawberry",
+           "fraise des bois": "wild_strawberry", "fraisier des bois": "wild_strawberry",
+           "woodland strawberry": "wild_strawberry", "alpine strawberry": "wild_strawberry",
+           "in flower": "bloom", "green": "unripe", "vert": "unripe", "verte": "unripe", "pas mûr": "unripe",
+           "mûr": "ripe", "mur": "ripe", "mûre": "ripe", "fruit": "ripe", "fruits": "ripe"}
 
 server = MCPServer(
     "botanical-flux",
@@ -135,6 +171,8 @@ def _model_file(sp, model):
     kind = (model or sp.get("model", "lokr")).lower()
     if kind not in ("lokr", "lora"):
         raise ValueError("model must be 'lokr' or 'lora'")
+    if kind not in sp.get("models", ("lokr", "lora")):
+        raise ValueError(f"No {kind} for {sp['name']}: available {', '.join(sp['models'])}")
     return kind, f"{LORA_DIR}/{sp['file']}_{kind}.safetensors" if LORA_DIR else f"{sp['file']}_{kind}.safetensors"
 
 
@@ -242,25 +280,29 @@ def species() -> str:
     lines = []
     for key, sp in SPECIES.items():
         kind, _ = _model_file(sp, None)
-        lines.append(f"- {key} (trigger {sp['trigger']}, default model {kind}): stages " +
+        only = " only" if len(sp.get("models", "ab")) == 1 else ""
+        lines.append(f"- {key} (trigger {sp['trigger']}, default model {kind}{only}): stages " +
                      ", ".join(f"{s} = \"{d}\"" for s, d in sp["stages"].items()))
     return ("Species (FLUX.1 [dev] + one LoKr / LoRA per species):\n" + "\n".join(lines) +
             "\nClimbing plants - settings seen in training: brick wall, plaster wall, stone wall, pergola, fence, "
             "residential house... Coverage: Sparse / Medium / Dense / Full coverage. "
-            "Framing: close-up, medium shot, wide shot.")
+            "Framing: close-up, medium shot, wide shot.\n"
+            "Lavender and strawberries (close-ups) - backgrounds seen in training: bare soil, gravel, grass, "
+            "straw mulch, mulch, moss, fallen leaves, stones, stone wall, wooden boards, pot, blurred garden, "
+            "strawberry leaves, other plants.")
 
 
 @server.tool()
-def generate(species: str, stage: str | None = None, setting: str = "stone wall, residential house, white sash windows",
+def generate(species: str, stage: str | None = None, setting: str | None = None,
              coverage: str | None = None, framing: str | None = None, seed: int = 42, model: str | None = None,
              weight: float = 1.0, guidance: float = 3.5, width: int | None = None, height: int | None = None) -> list:
     """Generate one image of a plant (txt2img, about 1 min on a 16 GB GPU).
 
     species: see species(). stage: season or growth stage (default: the first one).
-    setting: support and building (climbing plants) or background, in English. The seed sets the composition.
+    setting: support and building (climbing plants) or background, in English (default per species). The seed sets the composition.
     model: 'lokr' or 'lora' (default per species). Returns the image path and a preview."""
     key, sp, st = _resolve(species, stage)
-    prompt = _prompt(sp, st, setting, coverage=coverage, framing=framing)
+    prompt = _prompt(sp, st, setting or _setting(sp, "setting"), coverage=coverage, framing=framing)
     kind, lora = _model_file(sp, model)
     size = _setting(sp, "size")
     wf = _base(lora, weight, prompt, guidance)
